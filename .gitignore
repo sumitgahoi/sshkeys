@@ -1,1 +1,3 @@
 sshkeys
+sshkeys-*
+dist/

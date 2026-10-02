@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        run: |
+          mkdir dist
+
+          GOOS=darwin GOARCH=arm64 go build \
+            -o dist/sshkeys-darwin-arm64 .
+
+          GOOS=linux GOARCH=amd64 go build \
+            -o dist/sshkeys-linux-amd64 .
+
+          GOOS=linux GOARCH=arm64 go build \
+            -o dist/sshkeys-linux-arm64 .
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

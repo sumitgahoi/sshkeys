@@ -1,39 +1,49 @@
 # sshkeys
 
-`sshkeys` is a small CLI for synchronizing SSH public keys from a GitHub account into the local `~/.ssh/authorized_keys`.
+`sshkeys` copies the public SSH keys from a GitHub account into `~/.ssh/authorized_keys`. GitHub is the source of truth for the keys it manages.
 
-GitHub is the source of truth for keys managed by `sshkeys`. Existing keys and configuration outside the managed section are left untouched.
+Keys are read from `https://github.com/<github-user>.keys`. OpenSSH `ssh-keygen` must be on `PATH`.
+
+## Install
+
+On Linux (x86_64 or ARM64), install the latest release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sumitgahoi/sshkeys/main/install.sh | sudo bash
+```
+
+The script downloads that release, verifies its checksum, installs `/usr/local/bin/sshkeys` and the systemd units, and reloads systemd. `sudo ./install.sh` from a checkout does the same thing.
+
+On macOS, download `sshkeys-darwin-arm64` from the [latest release](https://github.com/sumitgahoi/sshkeys/releases/latest) and place it on `PATH`.
+
+## Setup
+
+Create one file per Linux user. The GitHub username can differ from the Linux username:
+
+```bash
+sudo install -d -m 0755 /etc/sshkeys
+printf 'GITHUB_USER=%s\n' <github-user> | sudo tee /etc/sshkeys/<linux-user>.conf >/dev/null
+```
+
+Run a first sync as that user, then enable the timer. It runs about every six hours:
+
+```bash
+sudo systemctl start sshkeys-sync@<linux-user>.service
+sudo systemctl enable --now sshkeys-sync@<linux-user>.timer
+```
 
 ## Usage
 
-Check whether the local file matches the keys published by a GitHub account:
-
 ```bash
 sshkeys status <github-user>
-```
-
-Synchronize the keys:
-
-```bash
 sshkeys sync <github-user>
 ```
 
-For example:
+`status` prints the number of GitHub keys and whether the local file matches. It does not change any files. `sync` updates the managed section, or prints `already up to date`.
 
-```bash
-sshkeys status sumitgahoi
-sshkeys sync sumitgahoi
-```
+## What gets written
 
-Keys are fetched from:
-
-```text
-https://github.com/<github-user>.keys
-```
-
-## How it works
-
-`sshkeys` owns only a clearly marked section of `authorized_keys`:
+Only the marked section is replaced. Every other line stays as it is. If `authorized_keys` is missing, `sync` creates it.
 
 ```text
 # BEGIN SSHKEYS MANAGED
@@ -42,108 +52,25 @@ ssh-rsa AAAA...
 # END SSHKEYS MANAGED
 ```
 
-Everything outside that section is preserved.
+A key removed on GitHub is removed from this section on the next successful sync.
 
-On sync:
-
-1. Fetch the account's public SSH keys from GitHub.
-2. Validate every key using the installed `ssh-keygen`.
-3. Construct the complete desired `authorized_keys`.
-4. If nothing changed, leave the file untouched.
-5. Back up an existing file to `authorized_keys.bak`.
-6. Replace the managed section with the current GitHub keys.
-
-If `authorized_keys` does not exist, it is created.
-
-Removing a key from GitHub removes it from the managed section on the next sync, provided at least one GitHub key remains.
-
-An empty GitHub key list is rejected to protect SSH access. Removing the final GitHub key does not automatically revoke the last managed key; remove it from the local managed section explicitly if revocation is required.
+If GitHub returns no keys, the command fails with `no SSH keys found` and leaves `authorized_keys` unchanged. The last managed key stays until you delete that line locally.
 
 ## Safety
 
-`sshkeys` is deliberately conservative around SSH access.
+- Missing, reversed, or duplicate markers make the command fail. Repair the file before syncing again.
+- `authorized_keys` must be a regular file. Symlinks and other special files are rejected, including a Proxmox host whose root `authorized_keys` points into `/etc/pve`.
+- Before replacing an existing file, `sync` copies it to `authorized_keys.bak`. A sync with nothing to change leaves both files alone. The file and its backup are mode `0600`.
+- A failed download, an invalid key, or an error while preparing the backup leaves the current `authorized_keys` in place.
 
-- Existing content outside the managed section is preserved.
-- Malformed or duplicate managed markers cause the operation to fail.
-- An existing `authorized_keys` must be a regular file.
-- Symlinks and other special files are rejected rather than followed.
-- The replacement file and backup are written with `0600` permissions.
-- The working file is not replaced unless preparation and backup succeed.
-- A no-op sync does not rewrite the file or its backup.
-- Sync assumes a single writer. Do not modify `authorized_keys` or run another sync concurrently.
-
-The symlink rule means some systems with special SSH-key management, such as a Proxmox host whose root `authorized_keys` points into `/etc/pve`, should be managed separately.
-
-## Build
-
-Requires Go and OpenSSH's `ssh-keygen`.
-
-```bash
-go build -o sshkeys .
-```
-
-Cross-compile for Linux AMD64:
-
-```bash
-GOOS=linux GOARCH=amd64 go build -o sshkeys-linux-amd64 .
-```
-
-For Linux ARM64:
-
-```bash
-GOOS=linux GOARCH=arm64 go build -o sshkeys-linux-arm64 .
-```
-
-## Install
-
-On Linux, install the latest release:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/sumitgahoi/sshkeys/main/install.sh | sudo bash
-```
-
-The script detects the architecture, downloads and verifies that release, installs `/usr/local/bin/sshkeys` and the systemd units, and reloads systemd. From a checkout, `sudo ./install.sh` does the same thing.
-
-Create one configuration file per Linux user. The GitHub username can differ from the Linux username:
-
-```bash
-sudo install -d -m 0755 /etc/sshkeys
-printf 'GITHUB_USER=%s\n' sumitgahoi | sudo tee /etc/sshkeys/sumit.conf >/dev/null
-```
-
-Run the first synchronization, then enable the timer. The service runs as that Linux user:
-
-```bash
-sudo systemctl start sshkeys-sync@sumit.service
-sudo systemctl enable --now sshkeys-sync@sumit.timer
-```
-
-The timer runs that service about every six hours.
-
-On macOS, build from source or download `sshkeys-darwin-arm64` from the latest release and place it on `PATH`.
+`sshkeys` updates that managed section only. It does not create key pairs, handle private keys, or change SSH server configuration.
 
 ## Upgrade
 
-Run the installer again:
+Rerun the installation command above. It replaces the binary and systemd units without changing your configuration or enabled timers.
+
+If the timer unit changes, restart the timer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sumitgahoi/sshkeys/main/install.sh | sudo bash
+sudo systemctl restart sshkeys-sync@<linux-user>.timer
 ```
-
-This replaces the binary and unit files. Configuration under `/etc/sshkeys` and existing timer enablement stay as they are.
-
-## Test
-
-```bash
-go test ./...
-go test -race ./...
-go vet ./...
-```
-
-## Scope
-
-`sshkeys` intentionally stays small. It does not manage private keys, generate key pairs, modify SSH server configuration, or attempt to interpret arbitrary `authorized_keys` syntax.
-
-Its job is simply:
-
-**GitHub public keys → one safely managed section of `authorized_keys`.**

@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodically sync SSH authorized keys from GitHub for %i
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=6h
+RandomizedDelaySec=30min
+
+[Install]
+WantedBy=timers.target

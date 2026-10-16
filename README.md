@@ -55,7 +55,9 @@ On sync:
 
 If `authorized_keys` does not exist, it is created.
 
-Removing a key from GitHub removes it from the managed section on the next sync.
+Removing a key from GitHub removes it from the managed section on the next sync, provided at least one GitHub key remains.
+
+An empty GitHub key list is rejected to protect SSH access. Removing the final GitHub key does not automatically revoke the last managed key; remove it from the local managed section explicitly if revocation is required.
 
 ## Safety
 
@@ -94,14 +96,41 @@ GOOS=linux GOARCH=arm64 go build -o sshkeys-linux-arm64 .
 
 ## Install
 
-A convenient per-user installation location on macOS or Linux is:
+On Linux, install the latest release:
 
 ```bash
-mkdir -p ~/.local/bin
-cp sshkeys ~/.local/bin/sshkeys
+curl -fsSL https://raw.githubusercontent.com/sumitgahoi/sshkeys/main/install.sh | sudo bash
 ```
 
-Make sure `~/.local/bin` is on your `PATH`.
+The script detects the architecture, downloads and verifies that release, installs `/usr/local/bin/sshkeys` and the systemd units, and reloads systemd. From a checkout, `sudo ./install.sh` does the same thing.
+
+Create one configuration file per Linux user. The GitHub username can differ from the Linux username:
+
+```bash
+sudo install -d -m 0755 /etc/sshkeys
+printf 'GITHUB_USER=%s\n' sumitgahoi | sudo tee /etc/sshkeys/sumit.conf >/dev/null
+```
+
+Run the first synchronization, then enable the timer. The service runs as that Linux user:
+
+```bash
+sudo systemctl start sshkeys-sync@sumit.service
+sudo systemctl enable --now sshkeys-sync@sumit.timer
+```
+
+The timer runs that service about every six hours.
+
+On macOS, build from source or download `sshkeys-darwin-arm64` from the latest release and place it on `PATH`.
+
+## Upgrade
+
+Run the installer again:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sumitgahoi/sshkeys/main/install.sh | sudo bash
+```
+
+This replaces the binary and unit files. Configuration under `/etc/sshkeys` and existing timer enablement stay as they are.
 
 ## Test
 

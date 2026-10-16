@@ -1,0 +1,11 @@
+[Unit]
+Description=Sync SSH authorized keys for Linux user %i
+Documentation=https://github.com/sumitgahoi/sshkeys
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=%i
+EnvironmentFile=/etc/sshkeys/%i.conf
+ExecStart=/usr/local/bin/sshkeys sync ${GITHUB_USER}

@@ -33,7 +33,7 @@ A failed fetch must never modify `authorized_keys`.
 
 Ignore blank lines and comment lines in fetched key data.
 
-At least one valid SSH public key must be returned.
+A successful response may contain zero SSH keys.
 
 Validate every fetched key before modifying any local SSH configuration.
 
@@ -59,6 +59,7 @@ Therefore:
 
 - keys added to GitHub are added on the next sync;
 - keys removed from GitHub are removed from the managed section on the next sync;
+- a successful response containing no keys leaves the managed section empty;
 - unmanaged keys outside the markers are untouched.
 
 If no managed section exists, append one without destroying existing file contents.
@@ -98,7 +99,7 @@ The backup replacement and `authorized_keys` replacement are two separate atomic
 If GitHub's current keys produce exactly the existing `authorized_keys` contents:
 
 - do not rewrite `authorized_keys`;
-- do not replace `authorized_keys.bak`;
+- do not create or modify `authorized_keys.bak`;
 - report that the file is already up to date.
 
 ## Status
@@ -161,6 +162,7 @@ Tests should cover behavior and safety invariants, including at minimum:
 - creating a managed section;
 - replacing an existing managed section;
 - preserving unmanaged content;
+- clearing the managed section when a successful fetch contains no keys;
 - rejecting malformed/duplicate marker state;
 - first-time creation of `authorized_keys`;
 - backup of the previous file during a change;

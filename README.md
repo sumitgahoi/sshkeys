@@ -21,15 +21,18 @@ On macOS, download `sshkeys-darwin-arm64` from the [latest release](https://gith
 Create one file per Linux user. The GitHub username can differ from the Linux username:
 
 ```bash
+linux_user=$(whoami)
+github_user=<github-user>
+
 sudo install -d -m 0755 /etc/sshkeys
-printf 'GITHUB_USER=%s\n' <github-user> | sudo tee /etc/sshkeys/<linux-user>.conf >/dev/null
+echo "GITHUB_USER=${github_user}" | sudo tee "/etc/sshkeys/${linux_user}.conf" >/dev/null
 ```
 
 Run a first sync as that user, then enable the timer. It runs about every six hours:
 
 ```bash
-sudo systemctl start sshkeys-sync@<linux-user>.service
-sudo systemctl enable --now sshkeys-sync@<linux-user>.timer
+sudo systemctl start "sshkeys-sync@${linux_user}.service"
+sudo systemctl enable --now "sshkeys-sync@${linux_user}.timer"
 ```
 
 ## Usage
@@ -52,15 +55,16 @@ ssh-rsa AAAA...
 # END SSHKEYS MANAGED
 ```
 
-A key removed on GitHub is removed from this section on the next successful sync.
+A key removed on GitHub is removed from this section on the next successful sync. A successful response with no keys leaves this section empty.
 
-If GitHub returns no keys, the command fails with `no SSH keys found` and leaves `authorized_keys` unchanged. The last managed key stays until you delete that line locally.
+A failed request leaves `authorized_keys` unchanged.
 
 ## Safety
 
 - Missing, reversed, or duplicate markers make the command fail. Repair the file before syncing again.
-- `authorized_keys` must be a regular file. Symlinks and other special files are rejected, including a Proxmox host whose root `authorized_keys` points into `/etc/pve`.
-- Before replacing an existing file, `sync` copies it to `authorized_keys.bak`. A sync with nothing to change leaves both files alone. The file and its backup are mode `0600`.
+- `authorized_keys` must be a regular file. Symlinks are unsupported.
+- A sync with nothing to change does nothing.
+- When the file must change, `sync` copies the existing `authorized_keys` to `authorized_keys.bak`. The file and its backup are mode `0600`.
 - A failed download, an invalid key, or an error while preparing the backup leaves the current `authorized_keys` in place.
 
 `sshkeys` updates that managed section only. It does not create key pairs, handle private keys, or change SSH server configuration.

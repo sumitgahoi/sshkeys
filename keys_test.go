@@ -29,6 +29,12 @@ ssh-ed25519 KEY2 macbook-air
 	}
 }
 
+func TestValidateKeysAllowsEmpty(t *testing.T) {
+	if err := validateKeys(parseKeys(nil)); err != nil {
+		t.Fatalf("validateKeys() error = %v", err)
+	}
+}
+
 func TestValidateKeysRejectsInvalidKey(t *testing.T) {
 	err := validateKeys([]string{
 		"ssh-ed25519 definitely-not-a-valid-key test",

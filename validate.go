@@ -7,10 +7,6 @@ import (
 )
 
 func validateKeys(keys []string) error {
-	if len(keys) == 0 {
-		return fmt.Errorf("no SSH keys found")
-	}
-
 	for _, key := range keys {
 		cmd := exec.Command("ssh-keygen", "-l", "-f", "-")
 		cmd.Stdin = strings.NewReader(key + "\n")

@@ -162,6 +162,50 @@ ssh-ed25519 KEY1 macbook-pro
 	}
 }
 
+func TestSyncAuthorizedKeysRemovesFinalManagedKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "authorized_keys")
+
+	initial := `ssh-ed25519 OUTSIDE emergency
+
+# BEGIN SSHKEYS MANAGED
+ssh-ed25519 KEY1 macbook-pro
+# END SSHKEYS MANAGED
+
+ssh-ed25519 OUTSIDE2 bootstrap
+`
+
+	if err := os.WriteFile(path, []byte(initial), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := syncAuthorizedKeys(path, nil)
+	if err != nil {
+		t.Fatalf("syncAuthorizedKeys() error = %v", err)
+	}
+
+	if !changed {
+		t.Fatal("syncAuthorizedKeys() changed = false, want true")
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := `ssh-ed25519 OUTSIDE emergency
+
+# BEGIN SSHKEYS MANAGED
+# END SSHKEYS MANAGED
+
+ssh-ed25519 OUTSIDE2 bootstrap
+`
+
+	if string(got) != want {
+		t.Fatalf("authorized_keys =\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestSyncAuthorizedKeysNoOpWhenUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "authorized_keys")
@@ -195,6 +239,37 @@ ssh-ed25519 KEY1 macbook-pro
 
 	if string(got) != string(backup) {
 		t.Fatalf("backup changed on no-op sync")
+	}
+}
+
+func TestSyncAuthorizedKeysNoOpDoesNotCreateBackup(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "authorized_keys")
+
+	keys := []string{
+		"ssh-ed25519 KEY1 macbook-pro",
+	}
+
+	data := []byte(`# BEGIN SSHKEYS MANAGED
+ssh-ed25519 KEY1 macbook-pro
+# END SSHKEYS MANAGED
+`)
+
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := syncAuthorizedKeys(path, keys)
+	if err != nil {
+		t.Fatalf("syncAuthorizedKeys() error = %v", err)
+	}
+
+	if changed {
+		t.Fatal("syncAuthorizedKeys() changed = true, want false")
+	}
+
+	if _, err := os.Stat(path + ".bak"); !os.IsNotExist(err) {
+		t.Fatal("backup created on unchanged sync")
 	}
 }
 
